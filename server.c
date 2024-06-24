@@ -4,6 +4,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <wchar.h>
 
 #define PORT 8080
 #define MAX_CLIENTS 10
@@ -11,6 +12,7 @@
 typedef struct message {
   char user[1024];
   char content[1024];
+  wchar_t stream_content;
 } message_t;
 
 int main() {
@@ -18,7 +20,7 @@ int main() {
 
   int client_sockets[MAX_CLIENTS] = {0};
 
-  fd_set readfds;
+  fd_set read_fds;
 
   server_socket = socket(AF_INET, SOCK_STREAM, 0);
   if (server_socket == -1) {
@@ -46,27 +48,27 @@ int main() {
   printf("Server listening on port %d\n", PORT);
 
   while (1) {
-    FD_ZERO(&readfds);
-    FD_SET(server_socket, &readfds);
+    FD_ZERO(&read_fds);
+    FD_SET(server_socket, &read_fds);
 
     int max_socket = server_socket;
     for (int i = 0; i < MAX_CLIENTS; i++) {
       int client_socket = client_sockets[i];
       if (client_socket > 0) {
-        FD_SET(client_socket, &readfds);
+        FD_SET(client_socket, &read_fds);
         if (client_socket > max_socket) {
           max_socket = client_socket;
         }
       }
     }
 
-    int activity = select(max_socket + 1, &readfds, NULL, NULL, NULL);
+    int activity = select(max_socket + 1, &read_fds, NULL, NULL, NULL);
     if (activity < 0) {
       perror("Select failed");
       exit(EXIT_FAILURE);
     }
 
-    if (FD_ISSET(server_socket, &readfds)) {
+    if (FD_ISSET(server_socket, &read_fds)) {
       int client_socket = accept(server_socket, NULL, NULL);
       if (client_socket == -1) {
         perror("Failed to accept client connection");
@@ -84,7 +86,7 @@ int main() {
 
     for (int i = 0; i < MAX_CLIENTS; i++) {
       int client_socket = client_sockets[i];
-      if (FD_ISSET(client_socket, &readfds)) {
+      if (FD_ISSET(client_socket, &read_fds)) {
         message_t message_recv;
         int recv_result =
             recv(client_socket, &message_recv, sizeof(message_recv), 0);

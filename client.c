@@ -4,6 +4,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <wchar.h>
 
 #define SERVER_ADDRESS "127.0.0.1"
 #define PORT 8080
@@ -11,6 +12,7 @@
 typedef struct message {
   char user[1024];
   char content[1024];
+  wchar_t stream_content;
 } message_t;
 
 int main(int argc, char *argv[]) {
@@ -53,9 +55,7 @@ int main(int argc, char *argv[]) {
       break;
     }
 
-    printf("Enter message: ");
-    fgets(message_send.content, sizeof(message_send.content), stdin);
-
+    fgetws(&message_send.stream_content, sizeof(message_send.content), stdin);
     message_send.content[strcspn(message_send.content, "\n")] = '\0';
 
     // Send message to server with username
