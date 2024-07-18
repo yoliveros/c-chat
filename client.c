@@ -1,88 +1,63 @@
 #include <arpa/inet.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
 #include <unistd.h>
-#include <wchar.h>
 
-#define SERVER_ADDRESS "127.0.0.1"
 #define PORT 8080
+#define BUFFER_SIZE 1024
 
-typedef struct message {
-  char user[1024];
-  char content[1024];
-  wchar_t stream_content;
-} message_t;
+void *receive_messages(void *sock) {
+  int client_socket = *(int *)sock;
+  char buffer[BUFFER_SIZE];
+  int valread;
 
-int main(int argc, char *argv[]) {
-  if (argc != 2) {
-    printf("Missing argument username\n");
-    exit(EXIT_FAILURE);
+  while ((valread = read(client_socket, buffer, BUFFER_SIZE)) > 0) {
+    buffer[valread] = '\0';
+    printf("Server: %s\n", buffer);
   }
 
-  int client_socket;
-  client_socket = socket(AF_INET, SOCK_STREAM, 0);
-  if (client_socket == -1) {
-    perror("Failed to create socket");
-    exit(EXIT_FAILURE);
+  return NULL;
+}
+
+int main() {
+  int sock = 0;
+  struct sockaddr_in serv_addr;
+  char buffer[BUFFER_SIZE] = {0};
+
+  // Creating socket file descriptor
+  if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    printf("\n Socket creation error \n");
+    return -1;
   }
 
-  struct sockaddr_in server_address;
-  server_address.sin_family = AF_INET;
-  server_address.sin_port = htons(PORT);
-  server_address.sin_addr.s_addr = inet_addr(SERVER_ADDRESS);
+  serv_addr.sin_family = AF_INET;
+  serv_addr.sin_port = htons(PORT);
 
-  int connect_result =
-      connect(client_socket, (struct sockaddr *)&server_address,
-              sizeof(server_address));
-
-  if (connect_result == -1) {
-    perror("Failed to connect to server");
-    exit(EXIT_FAILURE);
+  // Convert IPv4 and IPv6 addresses from text to binary form
+  if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0) {
+    printf("\nInvalid address/ Address not supported \n");
+    return -1;
   }
 
-  printf("Connected to server\n");
+  // Connect to the server
+  if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+    printf("\nConnection Failed \n");
+    return -1;
+  }
 
-  message_t message_send;
-  strcpy(message_send.user, argv[1]);
+  // Create a thread to receive messages from the server
+  pthread_t recv_thread;
+  pthread_create(&recv_thread, NULL, receive_messages, &sock);
 
+  // Send messages to the server
   while (1) {
-    memset(message_send.content, 0, sizeof(message_send.content));
-
-    if (strcmp(message_send.content, "!quit") == 0) {
-      printf("exiting...\n");
-      break;
-    }
-
-    fgetws(&message_send.stream_content, sizeof(message_send.content), stdin);
-    message_send.content[strcspn(message_send.content, "\n")] = '\0';
-
-    // Send message to server with username
-    int send_result =
-        send(client_socket, &message_send, sizeof(message_send), 0);
-    if (send_result == -1) {
-      perror("Failed to send message");
-      exit(EXIT_FAILURE);
-    }
-
-    printf("You: %s\n", message_send.content);
-
-    // Receive message from server
-    message_t message_recv;
-    int recv_result =
-        recv(client_socket, &message_recv, sizeof(message_recv), 0);
-    if (recv_result == -1) {
-      perror("Failed to receive message");
-      exit(EXIT_FAILURE);
-    } else if (recv_result == 0) {
-      printf("Server disconnected\n");
-      break;
-    }
-
-    printf("%s: %s\n", message_recv.user, message_recv.content);
+    printf("You: ");
+    fgets(buffer, BUFFER_SIZE, stdin);
+    send(sock, buffer, strlen(buffer), 0);
   }
 
-  close(client_socket);
+  close(sock);
   return 0;
 }
